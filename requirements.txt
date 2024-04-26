@@ -1,0 +1,7 @@
+torch~=2.2.0+cu121
+numpy~=1.26.3
+tqdm~=4.65.0
+sentencepiece~=0.1.99
+transformers~=4.32.1
+datasets~=2.17.0
+tokenizers~=0.13.3
