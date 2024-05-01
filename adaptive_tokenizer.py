@@ -14,7 +14,7 @@ from transformers.utils import WEIGHTS_NAME, SAFE_WEIGHTS_NAME
 
 from adapted_model import CusVocab_BartLMHeadModel, logger
 from sp_tokenizer import SPTokenizer
-
+import evaluate
 
 class CustomTrainer(Seq2SeqTrainer):
 
@@ -79,7 +79,7 @@ def train_sentencepiece_model_on_billsum():
 
 
 # %%
-def map_tokenizer_to_sentencepiece_model():
+def map_tokenizer_to_sentencepiece_model(): # "billsum" -> "bill", "sum"
     # Initialize the BART tokenizer
     bart_tokenizer = BartTokenizer.from_pretrained("./base_tokenizer")
     bart_tokenizer.add_special_tokens({"sep_token": "<sep>"})
@@ -149,21 +149,14 @@ def test_decode_sp_tokenizer():
     inputs = [f"summarize: {input}" for input in inputs]
     inputs = tokenizer(inputs, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
 
-    # print type of inputs
-    print(f"type of inputs: {type(inputs['input_ids'])}")
-    # convert to np.array
-    inputs_ids = inputs["input_ids"].numpy()
-    # convert to torch.tensor
-    inputs_ids = torch.tensor(inputs_ids)
     # Decode the tokenized inputs
-    decoded_inputs = tokenizer.batch_decode(inputs_ids, skip_special_tokens=True)
+    decoded_inputs = tokenizer.batch_decode(inputs["input_ids"], skip_special_tokens=True)
     print(decoded_inputs)
 
     # Generate the outputs
     outputs = model.generate(inputs["input_ids"], max_length=1024, num_beams=4, early_stopping=True)
     decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
     print(decoded_outputs)
-
 
 # %%
 def train_model():  # For BART LM Head (need to be adapted for question answering)
@@ -232,23 +225,19 @@ def train_model():  # For BART LM Head (need to be adapted for question answerin
             print("load customed_lm_head.lm_head.weight")
             print(load_model_dict[key][-1, :10])
         # NOTE: double check later
-        elif key in {"model.shared.weight", "model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight",
-                     "lm_head.weight"}:
+        elif key in {"model.shared.weight", "model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight", "lm_head.weight"}:
             print(f"load {key}")
             print(load_model_dict[key][-1, :10])
         elif key == "customed_lm_head.mapping_lm_head.weight":
             print("load customed_lm_head.mapping_lm_head.weight")
             print(load_model_dict[key][-1, :10])
     prefix = "summarize: "
-
     def preprocess_training_examples(examples):
         # Tokenize the examples
         inputs = [prefix + example for example in examples["text"]]
-        model_inputs = base_tokenizer(inputs, max_length=1024, padding="max_length", truncation=True,
-                                      return_tensors="pt")
+        model_inputs = base_tokenizer(inputs, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
 
-        labels = base_tokenizer(examples["summary"], max_length=1024, padding="max_length", truncation=True,
-                                return_tensors="pt")
+        labels = base_tokenizer(examples["summary"], max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
 
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
@@ -256,24 +245,25 @@ def train_model():  # For BART LM Head (need to be adapted for question answerin
     def preprocess_validation_examples(examples):
         # Tokenize the examples
         inputs = [prefix + example for example in examples["text"]]
-        model_inputs = base_tokenizer(inputs, max_length=1024, padding="max_length", truncation=True,
-                                      return_tensors="pt")
+        model_inputs = base_tokenizer(inputs, max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
 
-        labels = base_tokenizer(examples["summary"], max_length=1024, padding="max_length", truncation=True,
-                                return_tensors="pt")
+        labels = base_tokenizer(examples["summary"], max_length=1024, padding="max_length", truncation=True, return_tensors="pt")
 
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 
-    metric = load_metric("rouge")
+    metric = evaluate.load("rouge")
 
     def compute_metrics(p: EvalPrediction):
         predictions, labels = p
         # print type of predictions and labels
         print(f"type of predictions: {type(predictions)}")
+        predictions = predictions.tolist()
         print(f"type of labels: {type(labels)}")
+        labels = labels.tolist()
         predictions = base_tokenizer.batch_decode(predictions, skip_special_tokens=True)
         labels = np.where(labels != -100, labels, base_tokenizer.pad_token_id)
+        labels = labels.tolist()
         decoded_labels = base_tokenizer.batch_decode(labels, skip_special_tokens=True)
 
         result = metric.compute(predictions=predictions, references=decoded_labels, use_stemmer=True)
@@ -281,7 +271,7 @@ def train_model():  # For BART LM Head (need to be adapted for question answerin
         # Extract a few results
         prediction_lens = [np.count_nonzero(pred != base_tokenizer.pad_token_id) for pred in predictions]
         result["gen_len"] = np.mean(prediction_lens)
-        result = {k: round(v.mid.fmeasure * 100, 4) for k, v in result.items()}
+        result = {k: v for k, v in result.items()}
         return result
 
     data_collator = DataCollatorForSeq2Seq(base_tokenizer, model=model)
@@ -296,15 +286,18 @@ def train_model():  # For BART LM Head (need to be adapted for question answerin
                                                        remove_columns=dataset["test"].column_names)
 
     # Load trainer
+    from transformers import TrainingArguments
+    from transformers import Trainer
     training_args = Seq2SeqTrainingArguments(
         output_dir="./results",
         evaluation_strategy="epoch",
         learning_rate=2e-5,
-        num_train_epochs=3,
+        num_train_epochs=20,
         weight_decay=0.01,
         save_strategy="epoch",
         fp16=True,
-        per_device_train_batch_size=6,
+        per_device_train_batch_size=16,
+        per_device_eval_batch_size=16,
         predict_with_generate=True,
     )
     trainer = CustomTrainer(
@@ -316,7 +309,7 @@ def train_model():  # For BART LM Head (need to be adapted for question answerin
         compute_metrics=compute_metrics,
         data_collator=data_collator,
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint = False)
 
     # post processing with post_processing_function
     # trainer.evaluate(eval_dataset=tokenized_validation_dataset, post_process_function=post_processing_function)
@@ -324,4 +317,14 @@ def train_model():  # For BART LM Head (need to be adapted for question answerin
 
 # %%
 if __name__ == "__main__":
+    print("Training sentencepiece model on SQUAD dataset")
+    # %%
+    # train_sentencepiece_model_on_billsum()
+    # %% reindex
+    reindex_tokenizer_to_sentencepiece_model()
+    # %%
+    print("Mapping tokenizer to sentencepiece model")
+    map_tokenizer_to_sentencepiece_model()
+    # %%
+    print("Training model")
     train_model()

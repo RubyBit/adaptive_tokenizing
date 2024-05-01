@@ -48,7 +48,7 @@ class Plug_LM_Header(torch.nn.Module):
         self.dtype = dtype
         self.mapping_index = None
         if _weight is None:
-            self.lm_head = torch.nn.Linear(self.in_features, self.out_features, **factory_kwargs)
+            self.lm_head = torch.nn.Linear(self.in_features, self.out_features, **factory_kwargs) # 10 -> 10 weigth.size 100
             print("self.lm_head size:", self.lm_head.weight.size(), "device:", self.lm_head.weight.device)
             # self.weight = Parameter(torch.empty((self.out_features - num_incremental_embeddings, self.in_features), **factory_kwargs))
             # self.lm_head = torch.nn.Linear(self.in_features, self.out_features - self.num_incremental_embeddings, **factory_kwargs)
