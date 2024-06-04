@@ -231,6 +231,13 @@ def train_model():  # For BART LM Head (need to be adapted for question answerin
         elif key == "customed_lm_head.mapping_lm_head.weight":
             print("load customed_lm_head.mapping_lm_head.weight")
             print(load_model_dict[key][-1, :10])
+
+    embedding_size = model.get_input_embeddings().weight.shape[0]
+    logger.info(f"model input embeddings size: {embedding_size}")
+    if len(base_tokenizer) > embedding_size:
+        model.resize_token_embeddings(len(base_tokenizer))
+    logger.info(f"model input embeddings size: {model.get_input_embeddings().weight.shape[0]}")
+
     prefix = "summarize: "
     def preprocess_training_examples(examples):
         # Tokenize the examples
@@ -317,7 +324,7 @@ def train_model():  # For BART LM Head (need to be adapted for question answerin
 
 # %%
 if __name__ == "__main__":
-    print("Training sentencepiece model on SQUAD dataset")
+    print("Training sentencepiece model on BillSum dataset")
     # %%
     # train_sentencepiece_model_on_billsum()
     # %% reindex
