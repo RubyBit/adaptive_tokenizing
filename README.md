@@ -1,7 +1,7 @@
 # Adaptive Tokenizing
 
-Adaptive Tokenizing is a public implementation of the study Efficient Domain Adaptation of Language Models via Adaptive
-Tokenization by Sachidananda et.al. designed to provide efficient and flexible tokenization for various natural language processing (NLP) tasks. It allows for customizable tokenizing strategies, making it suitable for different languages and text formats.
+Adaptive Tokenizing is a public implementation of the study "Efficient Domain Adaptation of Language Models via Adaptive
+Tokenization" by Sachidananda et al. that was designed to provide efficient and flexible tokenization for various natural language processing (NLP) tasks. It allows for customizable tokenizing strategies, making it suitable for different languages and text formats.
 
 ## Features
 
@@ -104,3 +104,4 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 - Ruby community
 - NLP researchers and developers
+
